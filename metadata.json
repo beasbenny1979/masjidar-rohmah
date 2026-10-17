@@ -1,0 +1,6 @@
+{
+  "name": "Masjid Ar-Rohmah Rangkasbitung",
+  "description": "Website resmi Masjid Ar-Rohmah Komplek Bumi Narimbang Indah Rangkasbitung, Lebak, Banten. Jadwal salat, profil DKM, transparansi kas, agenda kegiatan, ZISWAF, dan berita Islami.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
