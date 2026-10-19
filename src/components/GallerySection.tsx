@@ -10,6 +10,7 @@ import {
   Tag
 } from 'lucide-react';
 import { MosqueImage } from '../types';
+import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 
 interface GallerySectionProps {
   images: MosqueImage[];
@@ -109,8 +110,9 @@ export const GallerySection: React.FC<GallerySectionProps> = ({
               {/* Image Container */}
               <div className="aspect-[16/10] w-full overflow-hidden relative">
                 <img
-                  src={image.imageUrl}
+                  src={resolveImageUrl(image.imageUrl)}
                   alt={image.title}
+                  onError={(e) => handleImageError(e, 'mosque')}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
@@ -165,8 +167,9 @@ export const GallerySection: React.FC<GallerySectionProps> = ({
 
               <div className="max-h-[70vh] flex items-center justify-center bg-black overflow-hidden">
                 <img
-                  src={selectedLightbox.imageUrl}
+                  src={resolveImageUrl(selectedLightbox.imageUrl)}
                   alt={selectedLightbox.title}
+                  onError={(e) => handleImageError(e, 'mosque')}
                   referrerPolicy="no-referrer"
                   className="max-h-[70vh] w-auto object-contain"
                 />

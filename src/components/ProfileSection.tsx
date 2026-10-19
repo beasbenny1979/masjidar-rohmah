@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { CommitteeMember, MosqueInfo } from '../types';
+import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 
 interface ProfileSectionProps {
   members: CommitteeMember[];
@@ -111,8 +112,9 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
                   <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden bg-slate-100 mb-4 border border-slate-200 relative group shadow-inner">
                     {ketuaPelindung.avatarUrl ? (
                       <img
-                        src={ketuaPelindung.avatarUrl}
+                        src={resolveImageUrl(ketuaPelindung.avatarUrl)}
                         alt="Bapak Rafiudin - Ketua Pelindung"
+                        onError={(e) => handleImageError(e, 'avatar')}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-300"
                         style={{ objectPosition: 'center 20%' }}
@@ -157,8 +159,9 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
                   <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden bg-slate-100 mb-4 border border-emerald-300 relative group shadow-inner">
                     {ketuaDkm.avatarUrl ? (
                       <img
-                        src={ketuaDkm.avatarUrl}
+                        src={resolveImageUrl(ketuaDkm.avatarUrl)}
                         alt="Bapak Adih - Ketua DKM"
+                        onError={(e) => handleImageError(e, 'avatar')}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover object-top group-hover:scale-102 transition-transform duration-300"
                       />
@@ -198,8 +201,9 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
                   <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden bg-white mb-4 border border-slate-200 relative group shadow-inner">
                     {bendahara.avatarUrl ? (
                       <img
-                        src={bendahara.avatarUrl}
+                        src={resolveImageUrl(bendahara.avatarUrl)}
                         alt="Bapak Heri Kristiyanto - Bendahara"
+                        onError={(e) => handleImageError(e, 'avatar')}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-300"
                       />

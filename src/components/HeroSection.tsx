@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { MOSQUE_INFO } from '../data/mockData';
 import { PrayerTime, MosqueInfo } from '../types';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 interface HeroSectionProps {
   onNavigate: (sectionId: string) => void;
@@ -65,7 +66,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       {info.heroImageUrl && (
         <div
           className="absolute inset-0 bg-cover bg-center opacity-20 pointer-events-none mix-blend-luminosity"
-          style={{ backgroundImage: `url(${info.heroImageUrl})` }}
+          style={{ backgroundImage: `url(${resolveImageUrl(info.heroImageUrl)})` }}
         />
       )}
 

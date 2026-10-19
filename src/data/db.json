@@ -64,7 +64,7 @@
       "id": "img-1",
       "title": "Kemegahan Kubah & Halaman Masjid Ar-Rohmah",
       "category": "Eksterior",
-      "imageUrl": "/src/assets/images/masjid_arrohmah_eksterior_1791855999083.jpg",
+      "imageUrl": "/images/masjid_arrohmah_eksterior_1791855999083.jpg",
       "caption": "Tampak depan Masjid Ar-Rohmah dengan kubah hijau khas, menara azan, serta pelataran asri di Komplek Bumi Narimbang Indah.",
       "uploadedAt": "12 Oktober 2026"
     },
@@ -72,7 +72,7 @@
       "id": "img-2",
       "title": "Ruang Sholat Utama Ber-AC & Karpet Turki",
       "category": "Ruang Sholat",
-      "imageUrl": "/src/assets/images/masjid_ruang_utama_1791855999934.jpg",
+      "imageUrl": "/images/masjid_ruang_utama_1791855999934.jpg",
       "caption": "Kenyamanan shalat berjamaah dengan karpet shaf tebal, mimbar kayu jati berukir kaligrafi, dan pendingin ruangan sejuk.",
       "uploadedAt": "12 Oktober 2026"
     },
@@ -80,7 +80,7 @@
       "id": "img-3",
       "title": "Area Mihrab & Mimbar Khutbah",
       "category": "Ruang Sholat",
-      "imageUrl": "/src/assets/images/masjid_ruang_utama_1791855999934.jpg",
+      "imageUrl": "/images/masjid_ruang_utama_1791855999934.jpg",
       "caption": "Mihrab marmer putih elegan tempat imam memimpin shalat 5 waktu dan shalat Jumat.",
       "uploadedAt": "10 Oktober 2026"
     },
@@ -88,7 +88,7 @@
       "id": "img-4",
       "title": "Pelataran & Penghijauan Masjid",
       "category": "Fasilitas",
-      "imageUrl": "/src/assets/images/masjid_arrohmah_eksterior_1791855999083.jpg",
+      "imageUrl": "/images/masjid_arrohmah_eksterior_1791855999083.jpg",
       "caption": "Area hijau taman dan parkiran luas yang aman dilengkapi CCTV 24 jam untuk kenyamanan jamaah.",
       "uploadedAt": "8 Oktober 2026"
     }

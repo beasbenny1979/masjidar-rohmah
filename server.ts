@@ -15,15 +15,24 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const dbPath = path.resolve(__dirname, 'src/data/db.json');
-const imagesDir = path.resolve(__dirname, 'src/assets/images');
+const publicImagesDir = path.resolve(__dirname, 'public/images');
+const publicUploadsDir = path.resolve(__dirname, 'public/uploads');
+const assetsImagesDir = path.resolve(__dirname, 'src/assets/images');
 
 // Ensure directories exist
-if (!fs.existsSync(imagesDir)) {
-  fs.mkdirSync(imagesDir, { recursive: true });
-}
+[publicImagesDir, publicUploadsDir, assetsImagesDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
-// Serve uploaded images statically
-app.use('/src/assets/images', express.static(imagesDir));
+// Serve uploaded and static images across multiple routes for maximum hosting compatibility
+app.use('/images', express.static(publicImagesDir));
+app.use('/uploads', express.static(publicUploadsDir));
+app.use('/src/assets/images', express.static(publicImagesDir));
+if (fs.existsSync(assetsImagesDir)) {
+  app.use('/src/assets/images', express.static(assetsImagesDir));
+}
 
 // API 1: Get Content
 app.get('/api/content', (_req, res) => {
@@ -138,10 +147,18 @@ app.post('/api/upload', (req, res) => {
 
     const safeName = filename ? filename.replace(/[^a-zA-Z0-9_-]/g, '') : 'upload';
     const finalFilename = `${safeName}_${Date.now()}${ext}`;
-    const targetPath = path.join(imagesDir, finalFilename);
+    const targetPath = path.join(publicImagesDir, finalFilename);
+    const backupUploadPath = path.join(publicUploadsDir, finalFilename);
 
     fs.writeFileSync(targetPath, buffer);
-    const publicUrl = `/src/assets/images/${finalFilename}`;
+    fs.writeFileSync(backupUploadPath, buffer);
+    if (fs.existsSync(assetsImagesDir)) {
+      try {
+        fs.writeFileSync(path.join(assetsImagesDir, finalFilename), buffer);
+      } catch {}
+    }
+
+    const publicUrl = `/images/${finalFilename}`;
 
     return res.json({ success: true, url: publicUrl });
   } catch (err: any) {

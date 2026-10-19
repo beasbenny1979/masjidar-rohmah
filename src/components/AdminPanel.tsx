@@ -62,6 +62,7 @@ import {
   BankAccount,
   MosqueFacility,
 } from '../types';
+import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -1527,8 +1528,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {mosqueInfo.heroImageUrl && (
                       <div className="mt-2 h-24 rounded-lg overflow-hidden border border-slate-200 bg-slate-900 relative">
                         <img
-                          src={mosqueInfo.heroImageUrl}
+                          src={resolveImageUrl(mosqueInfo.heroImageUrl)}
                           alt="Hero Preview"
+                          onError={(e) => handleImageError(e, 'mosque')}
                           className="w-full h-full object-cover opacity-80"
                         />
                         <span className="absolute bottom-1 right-2 text-[10px] bg-black/60 text-white px-2 py-0.5 rounded">
@@ -2039,8 +2041,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div>
                         <div className="aspect-[16/10] bg-slate-100 overflow-hidden relative">
                           <img
-                            src={img.imageUrl}
+                            src={resolveImageUrl(img.imageUrl)}
                             alt={img.title}
+                            onError={(e) => handleImageError(e, 'mosque')}
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
                           />
@@ -2097,8 +2100,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <div className="w-20 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 relative shrink-0">
                           {member.avatarUrl ? (
                             <img
-                              src={member.avatarUrl}
+                              src={resolveImageUrl(member.avatarUrl)}
                               alt={member.name}
+                              onError={(e) => handleImageError(e, 'avatar')}
                               referrerPolicy="no-referrer"
                               className="w-full h-full object-cover"
                             />
@@ -3611,8 +3615,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="w-32 h-32 bg-white p-2 rounded-xl border border-slate-300 shadow-inner flex items-center justify-center overflow-hidden shrink-0">
                         {mosqueInfo.qrisImageUrl ? (
                           <img
-                            src={mosqueInfo.qrisImageUrl}
+                            src={resolveImageUrl(mosqueInfo.qrisImageUrl)}
                             alt="QRIS Preview"
+                            onError={(e) => handleImageError(e, 'qris')}
                             className="w-full h-full object-contain"
                           />
                         ) : (

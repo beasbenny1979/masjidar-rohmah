@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { BANK_ACCOUNTS, MOSQUE_INFO } from '../data/mockData';
 import { DonationSubmission, BankAccount, MosqueInfo } from '../types';
+import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 
 interface DonationSectionProps {
   bankAccounts?: BankAccount[];
@@ -265,8 +266,9 @@ export const DonationSection: React.FC<DonationSectionProps> = ({ bankAccounts, 
               {info.qrisImageUrl ? (
                 <div className="w-64 h-64 mx-auto bg-white p-2 rounded-2xl shadow-inner border border-slate-200 flex items-center justify-center overflow-hidden">
                   <img
-                    src={info.qrisImageUrl}
+                    src={resolveImageUrl(info.qrisImageUrl)}
                     alt="QRIS Masjid Ar-Rohmah"
+                    onError={(e) => handleImageError(e, 'qris')}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-contain"
                   />
