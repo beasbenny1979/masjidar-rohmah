@@ -855,7 +855,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (onSaveToBackend) {
       await onSaveToBackend();
     }
-    showToast('Perubahan berhasil disimpan ke database backend!');
+    showToast('Semua perubahan berhasil disinkronkan & disimpan ke browser (localStorage) dan backend!');
   };
 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1283,12 +1283,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
 
+            {/* Realtime Browser & Database Sync Status Badge */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-200 text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <div className="text-left">
+                <span className="block text-[9px] uppercase tracking-wider font-semibold text-emerald-400 leading-none">Sync Browser & Server</span>
+                <span className="font-bold text-[11px] text-white">Tersimpan Otomatis</span>
+              </div>
+            </div>
+
             <button
               onClick={handleManualSave}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-md transition-all"
+              title="Paksa sinkronisasi dan simpan seluruh data sekarang"
             >
               <Save className="w-4 h-4" />
-              <span>Simpan ke Backend</span>
+              <span>Simpan & Sinkronkan</span>
             </button>
 
             <button
@@ -3812,20 +3822,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         {/* Footer actions */}
-        <div className="p-4 bg-slate-50 border-t flex items-center justify-between text-xs text-slate-500 shrink-0">
-          <span>Setiap perubahan dapat disimpan langsung ke backend dan browser localStorage.</span>
+        <div className="p-4 bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 shrink-0">
           <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="text-slate-700 font-medium">
+              Semua perubahan via Admin DKM langsung tersinkronisasi ke browser (localStorage) dan database backend secara real-time.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold"
+              className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold transition-colors"
             >
-              Tutup
+              Tutup Panel
             </button>
             <button
               onClick={handleManualSave}
-              className="px-4 py-2 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white font-bold shadow-xs"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white font-bold shadow-xs transition-colors"
             >
-              Simpan Semua Perubahan
+              <Save className="w-4 h-4 text-amber-300" />
+              <span>Simpan & Sinkronkan Sekarang</span>
             </button>
           </div>
         </div>
