@@ -1,0 +1,17 @@
+backend:
+  name: git-gateway
+  branch: main # atau master, sesuaikan dengan nama branch utama repositori Anda
+
+media_folder: "public/images" # Folder tempat gambar baru akan disimpan
+public_folder: "/images"     # Jalur URL gambar saat dipanggil di website
+
+collections:
+  - name: "pages"
+    label: "Halaman"
+    files:
+      - file: "src/data/home.json" # contoh file data halaman utama Anda
+        label: "Home Page"
+        name: "home"
+        fields:
+          - { label: "Judul", name: "title", widget: "string" }
+          - { label: "Gambar Utama", name: "hero_image", widget: "image" }
