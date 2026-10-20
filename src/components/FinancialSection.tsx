@@ -481,6 +481,13 @@ export const FinancialSection: React.FC<FinancialSectionProps> = ({
               </BarChart>
             </ResponsiveContainer>
           </div>
+
+          {transactions.length === 0 && (
+            <div className="mt-4 text-center text-xs text-slate-500 bg-emerald-50/50 py-2.5 px-4 rounded-xl border border-emerald-100 flex items-center justify-center gap-2">
+              <span className="font-semibold text-emerald-800">Status Awal:</span>
+              <span>Arus kas operasional dan pembangunan dimulai dari Rp 0. Grafik tren akan terisi otomatis seiring pencatatan buku kas oleh Bendahara DKM.</span>
+            </div>
+          )}
         </div>
 
         {/* Transactions Table with Filters & Search */}
@@ -596,8 +603,22 @@ export const FinancialSection: React.FC<FinancialSectionProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-500">
-                      Tidak ada catatan transaksi yang sesuai dengan filter.
+                    <td colSpan={5} className="py-12 text-center text-slate-500">
+                      <div className="max-w-md mx-auto flex flex-col items-center justify-center space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                          <Wallet className="w-6 h-6" />
+                        </div>
+                        <span className="font-bold text-slate-800 text-sm block">
+                          {searchQuery || filterType !== 'all' || filterCategory !== 'all'
+                            ? 'Tidak ada mutasi kas yang sesuai dengan kriteria filter.'
+                            : 'Belum Ada Mutasi Kas Tercatat (Saldo Awal Bersih Rp 0)'}
+                        </span>
+                        <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+                          {searchQuery || filterType !== 'all' || filterCategory !== 'all'
+                            ? 'Silakan sesuaikan kata kunci pencarian atau ubah filter pos kas di atas.'
+                            : 'Seluruh pencatatan kas operasional, pembangunan, dan ZISWAF dikelola secara transparan dan akuntabel oleh Bendahara DKM via Panel Admin.'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
