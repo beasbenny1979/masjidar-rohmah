@@ -178,10 +178,10 @@ app.post('/api/reset', (_req, res) => {
   }
 });
 
-// API 5: Gemini Chatbot for Jamaah
+// API 5: Multi-turn Gemini Chatbot with Model Selection & System Instruction
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { messages, taskType, model, customRole } = req.body;
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return res.status(500).json({
@@ -191,6 +191,19 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
+
+    // Select model based on task complexity as instructed:
+    // - gemini-4-argon for particularly complex tasks
+    // - gemini-3.8-flash for general tasks
+    // - gemini-3.1-flash-lite for tasks that should happen fast
+    let selectedModel = 'gemini-3.8-flash';
+    if (model === 'gemini-4-argon' || taskType === 'complex') {
+      selectedModel = 'gemini-4-argon';
+    } else if (model === 'gemini-3.1-flash-lite' || taskType === 'fast') {
+      selectedModel = 'gemini-3.1-flash-lite';
+    } else if (model) {
+      selectedModel = model;
+    }
 
     // Grounding data from current mosque database
     let groundingContext = '';
@@ -206,8 +219,9 @@ app.post('/api/chat', async (req, res) => {
       }
     } catch {}
 
-    const systemInstruction = `Anda adalah "Asisten AI Masjid Ar-Rohmah Rangkasbitung", asisten virtual resmi DKM Masjid Ar-Rohmah di Komplek Bumi Narimbang Indah, Rangkasbitung, Kabupaten Lebak, Banten.
-Tugas Anda adalah melayani jamaah dengan ramah, santun, dan bernuansa Islami.
+    const roleName = customRole || 'Asisten Cerdas Virtual DKM Masjid Ar-Rohmah Rangkasbitung';
+    const systemInstruction = `Anda adalah "${roleName}", asisten virtual resmi DKM Masjid Ar-Rohmah di Komplek Bumi Narimbang Indah, Rangkasbitung, Kabupaten Lebak, Banten.
+Tugas Anda adalah melayani jamaah dengan ramah, santun, bijaksana, dan bernuansa Islami.
 Gunakan salam pembuka islami (Assalamu'alaikum Warahmatullahi Wabarakatuh), bismillah, alhamdulillah, dan kata-kata penyejuk hati.
 
 Informasi resmi masjid yang dapat Anda rujuk:
@@ -224,7 +238,7 @@ Bantulah jamaah dengan jawaban yang jelas, terstruktur (bullet points), ringkas,
     }));
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: selectedModel,
       contents: contents,
       config: {
         systemInstruction,
@@ -233,9 +247,74 @@ Bantulah jamaah dengan jawaban yang jelas, terstruktur (bullet points), ringkas,
     });
 
     const reply = response.text || 'Mohon maaf, saat ini asisten belum dapat memberikan jawaban.';
-    return res.json({ success: true, reply });
+    return res.json({ success: true, reply, modelUsed: selectedModel });
   } catch (err: any) {
     console.error('Gemini chat API error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API 6: Lyria Music Generation (lyria-3-clip-preview for <= 30s clips, lyria-3-pro-preview for full-length)
+app.post('/api/music/generate', async (req, res) => {
+  try {
+    const { prompt, type } = req.body; // type: 'clip' (up to 30s) or 'pro' (full-length track)
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'Kunci API Gemini (GEMINI_API_KEY) belum terkonfigurasi di lingkungan server.',
+      });
+    }
+
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: 'Prompt musik diperlukan' });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    const selectedModel = type === 'pro' ? 'lyria-3-pro-preview' : 'lyria-3-clip-preview';
+
+    const response = await ai.models.generateContentStream({
+      model: selectedModel,
+      contents: prompt,
+    });
+
+    let audioBase64 = '';
+    let lyrics = '';
+    let mimeType = 'audio/wav';
+
+    for await (const chunk of response) {
+      const parts = chunk.candidates?.[0]?.content?.parts;
+      if (!parts) continue;
+
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          if (!audioBase64 && part.inlineData.mimeType) {
+            mimeType = part.inlineData.mimeType;
+          }
+          audioBase64 += part.inlineData.data;
+        }
+        if (part.text && !lyrics) {
+          lyrics = part.text;
+        }
+      }
+    }
+
+    if (!audioBase64) {
+      return res.status(500).json({
+        success: false,
+        error: 'Model Lyria tidak menghasilkan stream audio. Pastikan prompt musik valid.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      audioBase64,
+      mimeType,
+      lyrics,
+      modelUsed: selectedModel,
+    });
+  } catch (err: any) {
+    console.error('Lyria music generation API error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

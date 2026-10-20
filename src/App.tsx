@@ -14,6 +14,8 @@ import { ContactSection } from './components/ContactSection';
 import { MosqueTVMode } from './components/MosqueTVMode';
 import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
+import { AiChatbot } from './components/AiChatbot';
+import { MusicGeneratorModal } from './components/MusicGeneratorModal';
 import {
   MOSQUE_INFO,
   COMMITTEE_MEMBERS,
@@ -43,6 +45,7 @@ import {
   BankAccount,
   MosqueFacility,
 } from './types';
+import { addCacheBuster } from './utils/imageUtils';
 
 const filterOnlyCoreLeaders = (list: CommitteeMember[]): CommitteeMember[] => {
   if (!Array.isArray(list) || list.length === 0) return COMMITTEE_MEMBERS;
@@ -61,35 +64,75 @@ const filterOnlyCoreLeaders = (list: CommitteeMember[]): CommitteeMember[] => {
   return filtered.length > 0 ? filtered.slice(0, 3) : COMMITTEE_MEMBERS;
 };
 
+// Helper to attach cache-busting parameter to all image URLs in MosqueInfo
+const applyImageCacheBusterToMosqueInfo = (info: MosqueInfo, time?: string | number): MosqueInfo => {
+  if (!info) return info;
+  return {
+    ...info,
+    heroImageUrl: info.heroImageUrl ? addCacheBuster(info.heroImageUrl, time) : info.heroImageUrl,
+    qrisImageUrl: info.qrisImageUrl ? addCacheBuster(info.qrisImageUrl, time) : info.qrisImageUrl,
+  };
+};
+
+// Helper to attach cache-busting parameter to all member avatar URLs
+const applyImageCacheBusterToMembers = (membersList: CommitteeMember[], time?: string | number): CommitteeMember[] => {
+  if (!Array.isArray(membersList)) return membersList;
+  return membersList.map((m) => ({
+    ...m,
+    avatarUrl: m.avatarUrl ? addCacheBuster(m.avatarUrl, time) : m.avatarUrl,
+  }));
+};
+
+// Helper to attach cache-busting parameter to all gallery image URLs
+const applyImageCacheBusterToGallery = (images: MosqueImage[], time?: string | number): MosqueImage[] => {
+  if (!Array.isArray(images)) return images;
+  return images.map((img) => ({
+    ...img,
+    imageUrl: img.imageUrl ? addCacheBuster(img.imageUrl, time) : img.imageUrl,
+  }));
+};
+
 export default function App() {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [tvModeOpen, setTvModeOpen] = useState<boolean>(false);
   const [adminOpen, setAdminOpen] = useState<boolean>(false);
+  const [musicModalOpen, setMusicModalOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('beranda');
 
-  // 1. Mosque Info & Wording
+  // 1. Mosque Info & Wording (with cache-busting for image URLs from localStorage)
   const [mosqueInfo, setMosqueInfo] = useState<MosqueInfo>(() => {
     try {
       const saved = localStorage.getItem('arrohmah_mosque_info');
-      if (saved) return JSON.parse(saved);
+      const savedAt = localStorage.getItem('arrohmah_last_saved');
+      if (saved) {
+        return applyImageCacheBusterToMosqueInfo(JSON.parse(saved), savedAt || undefined);
+      }
     } catch {}
     return MOSQUE_INFO;
   });
 
-  // 2. Committee Members (Pengurus DKM - Hanya Pelindung, Ketua, dan Bendahara)
+  // 2. Committee Members (with cache-busting for avatar URLs from localStorage)
   const [members, setMembers] = useState<CommitteeMember[]>(() => {
     try {
       const saved = localStorage.getItem('arrohmah_members');
-      if (saved) return filterOnlyCoreLeaders(JSON.parse(saved));
+      const savedAt = localStorage.getItem('arrohmah_last_saved');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return filterOnlyCoreLeaders(applyImageCacheBusterToMembers(parsed, savedAt || undefined));
+      }
     } catch {}
     return COMMITTEE_MEMBERS;
   });
 
-  // 3. Mosque Gallery Images
+  // 3. Mosque Gallery Images (with cache-busting for gallery URLs from localStorage)
   const [galleryImages, setGalleryImages] = useState<MosqueImage[]>(() => {
     try {
       const saved = localStorage.getItem('arrohmah_gallery_images');
-      if (saved) return JSON.parse(saved);
+      const savedAt = localStorage.getItem('arrohmah_last_saved');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return applyImageCacheBusterToGallery(parsed, savedAt || undefined);
+      }
     } catch {}
     return INITIAL_MOSQUE_IMAGES;
   });
@@ -267,9 +310,10 @@ export default function App() {
       if (!e.key || !e.newValue) return;
       try {
         const val = JSON.parse(e.newValue);
-        if (e.key === 'arrohmah_mosque_info') setMosqueInfo(val);
-        if (e.key === 'arrohmah_members') setMembers(filterOnlyCoreLeaders(val));
-        if (e.key === 'arrohmah_gallery_images') setGalleryImages(val);
+        const savedAt = localStorage.getItem('arrohmah_last_saved');
+        if (e.key === 'arrohmah_mosque_info') setMosqueInfo(applyImageCacheBusterToMosqueInfo(val, savedAt || undefined));
+        if (e.key === 'arrohmah_members') setMembers(filterOnlyCoreLeaders(applyImageCacheBusterToMembers(val, savedAt || undefined)));
+        if (e.key === 'arrohmah_gallery_images') setGalleryImages(applyImageCacheBusterToGallery(val, savedAt || undefined));
         if (e.key === 'arrohmah_friday_officers') setFridayOfficers(val);
         if (e.key === 'arrohmah_financial_summary') setFinancialSummary(val);
         if (e.key === 'arrohmah_transactions') setTransactions(val);
@@ -298,17 +342,19 @@ export default function App() {
         if (d.savedAt) {
           if (!localSavedAt || new Date(d.savedAt).getTime() >= new Date(localSavedAt).getTime()) {
             if (d.mosqueInfo) {
-              setMosqueInfo(d.mosqueInfo);
-              try { localStorage.setItem('arrohmah_mosque_info', JSON.stringify(d.mosqueInfo)); } catch {}
+              const updated = applyImageCacheBusterToMosqueInfo(d.mosqueInfo, d.savedAt);
+              setMosqueInfo(updated);
+              try { localStorage.setItem('arrohmah_mosque_info', JSON.stringify(updated)); } catch {}
             }
             if (d.members) {
-              const filtered = filterOnlyCoreLeaders(d.members);
+              const filtered = filterOnlyCoreLeaders(applyImageCacheBusterToMembers(d.members, d.savedAt));
               setMembers(filtered);
               try { localStorage.setItem('arrohmah_members', JSON.stringify(filtered)); } catch {}
             }
             if (d.galleryImages) {
-              setGalleryImages(d.galleryImages);
-              try { localStorage.setItem('arrohmah_gallery_images', JSON.stringify(d.galleryImages)); } catch {}
+              const updated = applyImageCacheBusterToGallery(d.galleryImages, d.savedAt);
+              setGalleryImages(updated);
+              try { localStorage.setItem('arrohmah_gallery_images', JSON.stringify(updated)); } catch {}
             }
             if (d.fridayOfficers) {
               setFridayOfficers(d.fridayOfficers);
@@ -459,29 +505,34 @@ export default function App() {
 
   // Synchronized Update Handlers (React State + localStorage + Auto-Sync Backend)
   const handleUpdateMosqueInfo = (info: MosqueInfo) => {
-    setMosqueInfo(info);
+    const nowIso = new Date().toISOString();
+    const withCacheBuster = applyImageCacheBusterToMosqueInfo(info, nowIso);
+    setMosqueInfo(withCacheBuster);
     try {
-      localStorage.setItem('arrohmah_mosque_info', JSON.stringify(info));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_mosque_info', JSON.stringify(withCacheBuster));
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateMembers = (newMembers: CommitteeMember[]) => {
-    const filtered = filterOnlyCoreLeaders(newMembers);
+    const nowIso = new Date().toISOString();
+    const filtered = filterOnlyCoreLeaders(applyImageCacheBusterToMembers(newMembers, nowIso));
     setMembers(filtered);
     try {
       localStorage.setItem('arrohmah_members', JSON.stringify(filtered));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateGalleryImages = (images: MosqueImage[]) => {
-    setGalleryImages(images);
+    const nowIso = new Date().toISOString();
+    const withCacheBuster = applyImageCacheBusterToGallery(images, nowIso);
+    setGalleryImages(withCacheBuster);
     try {
-      localStorage.setItem('arrohmah_gallery_images', JSON.stringify(images));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_gallery_images', JSON.stringify(withCacheBuster));
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
@@ -618,6 +669,7 @@ export default function App() {
       <Navbar
         onOpenTvMode={() => setTvModeOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
+        onOpenMusic={() => setMusicModalOpen(true)}
         activeSection={activeSection}
         onNavigate={handleNavigate}
         mosqueInfo={mosqueInfo}
@@ -694,6 +746,15 @@ export default function App() {
         onOpenTvMode={() => setTvModeOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
         mosqueInfo={mosqueInfo}
+      />
+
+      {/* Gemini AI Multi-turn Chatbot Assistant */}
+      <AiChatbot />
+
+      {/* Lyria Music & Instrumental Generator Modal */}
+      <MusicGeneratorModal
+        isOpen={musicModalOpen}
+        onClose={() => setMusicModalOpen(false)}
       />
     </div>
   );

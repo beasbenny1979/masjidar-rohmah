@@ -19,7 +19,21 @@ interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   timestamp: string;
+  modelUsed?: string;
 }
+
+const BOT_ROLES = [
+  { id: 'umum', name: 'Asisten Umum Masjid', description: 'Informasi umum masjid, jadwal shalat, pengajian & profil' },
+  { id: 'fiqih', name: 'Konsultan Fiqih & Ibadah', description: 'Panduan tata cara ibadah salat, zakat, puasa & fatwa praktis' },
+  { id: 'kifayah', name: 'Layanan Sosial & Jenazah 24 Jam', description: 'Prosedur fardhu kifayah, mobil jenazah & santunan yatim' },
+  { id: 'keuangan', name: 'Transparansi Kas & ZISWAF', description: 'Rincian kas masjid, saldo kas & konfirmasi transfer donasi' },
+];
+
+const MODEL_OPTIONS = [
+  { id: 'gemini-3.8-flash', label: 'Umum (gemini-3.8-flash)', taskType: 'general' },
+  { id: 'gemini-3.1-flash-lite', label: 'Cepat (gemini-3.1-flash-lite)', taskType: 'fast' },
+  { id: 'gemini-4-argon', label: 'Kompleks (gemini-4-argon)', taskType: 'complex' },
+];
 
 const QUICK_PROMPTS = [
   { label: 'Saldo Kas Masjid Terkini', text: 'Berapa total saldo kas masjid yang terkumpul saat ini dan bagaimana rinciannya?' },
@@ -33,6 +47,9 @@ export const AiChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(BOT_ROLES[0].name);
+  const [selectedModel, setSelectedModel] = useState<'gemini-3.8-flash' | 'gemini-3.1-flash-lite' | 'gemini-4-argon'>('gemini-3.8-flash');
+  const [showConfig, setShowConfig] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     return [
       {
@@ -40,6 +57,7 @@ export const AiChatbot: React.FC = () => {
         role: 'model',
         content: `Assalamu'alaikum Warahmatullahi Wabarakatuh.\n\nSelamat datang di layanan informasi virtual **Masjid Ar-Rohmah Rangkasbitung**.\n\nSaya asisten cerdas virtual DKM, siap membantu Anda mengetahui transparansi kas, jadwal shalat, kajian majelis ilmu, fardhu kifayah jenazah 24 jam, maupun konsultasi seputar masjid. Ada yang bisa saya bantu?`,
         timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        modelUsed: 'gemini-3.8-flash',
       },
     ];
   });
@@ -73,7 +91,7 @@ export const AiChatbot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Prepare payload for backend proxy
+      // Prepare payload for backend proxy with multi-turn history, role, and model selection
       const payloadMessages = newMessages
         .filter((m) => m.id !== 'welcome')
         .map((m) => ({
@@ -84,7 +102,11 @@ export const AiChatbot: React.FC = () => {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: payloadMessages }),
+        body: JSON.stringify({
+          messages: payloadMessages,
+          model: selectedModel,
+          customRole: selectedRole,
+        }),
       });
 
       const data = await res.json();
@@ -97,6 +119,7 @@ export const AiChatbot: React.FC = () => {
         role: 'model',
         content: data.reply,
         timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        modelUsed: data.modelUsed || selectedModel,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -199,6 +222,39 @@ export const AiChatbot: React.FC = () => {
             </div>
           </div>
 
+          {/* Model & Role Selector Bar */}
+          <div className="px-3 py-2 bg-emerald-950/95 border-b border-emerald-800/60 flex items-center justify-between gap-2 text-[10px] text-emerald-200 shrink-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <span className="text-slate-400 font-semibold shrink-0">Peran:</span>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                className="bg-emerald-900/90 text-white rounded-lg px-2 py-1 text-[10.5px] border border-emerald-700/60 focus:outline-none truncate w-full"
+              >
+                {BOT_ROLES.map((r) => (
+                  <option key={r.id} value={r.name} className="bg-slate-900 text-white">
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-slate-400 font-semibold">Model:</span>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value as any)}
+                className="bg-emerald-900/90 text-amber-300 font-bold rounded-lg px-2 py-1 text-[10.5px] border border-emerald-700/60 focus:outline-none"
+              >
+                {MODEL_OPTIONS.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-slate-900 text-white">
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Messages Scroll Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/60 text-xs">
             {messages.map((msg) => {
@@ -226,12 +282,19 @@ export const AiChatbot: React.FC = () => {
                     }`}
                   >
                     <div>{msg.content}</div>
-                    <div
-                      className={`text-[9px] mt-1 text-right ${
-                        isUser ? 'text-emerald-200/70' : 'text-slate-400'
-                      }`}
-                    >
-                      {msg.timestamp}
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      {!isUser && msg.modelUsed ? (
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {msg.modelUsed}
+                        </span>
+                      ) : <span />}
+                      <span
+                        className={`text-[9px] ${
+                          isUser ? 'text-emerald-200/70' : 'text-slate-400'
+                        }`}
+                      >
+                        {msg.timestamp}
+                      </span>
                     </div>
                   </div>
                 </div>

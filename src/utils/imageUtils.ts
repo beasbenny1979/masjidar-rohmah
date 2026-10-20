@@ -48,38 +48,83 @@ const FALLBACK_AVATAR_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
 `)}`;
 
 /**
- * Resolves an image URL so it functions correctly regardless of host configuration.
- * - Leaves data URIs untouched.
- * - Leaves external http/https URLs untouched.
- * - Replaces any `/src/assets/images/` path with public `/images/` path.
+ * Appends a cache-busting timestamp or random query parameter to an image URL.
+ * - Does not alter base64 data URIs (e.g. data:image/...).
+ * - Uses the last saved timestamp from localStorage if available, or custom timestamp/random string.
+ * - Forces browsers to bypass cached responses and re-fetch updated images.
  */
-export function resolveImageUrl(url?: string | null): string {
+export function addCacheBuster(
+  url?: string | null,
+  customParam?: string | number
+): string {
   if (!url) return '';
   const trimmed = url.trim();
   if (!trimmed) return '';
 
-  // Base64 data URLs work natively anywhere
-  if (trimmed.startsWith('data:image/')) {
+  // Data URLs (base64 or inline svg) must never receive query parameters
+  if (trimmed.startsWith('data:')) {
     return trimmed;
   }
 
-  // Absolute web URLs work natively
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  // Determine timestamp/parameter value
+  let paramValue = customParam;
+  if (!paramValue) {
+    try {
+      const savedAt = typeof window !== 'undefined' ? localStorage.getItem('arrohmah_last_saved') : null;
+      if (savedAt) {
+        paramValue = new Date(savedAt).getTime();
+      }
+    } catch {}
+  }
+
+  // If still not available, use current timestamp
+  if (!paramValue) {
+    paramValue = Date.now();
+  }
+
+  // Strip existing t= parameter to avoid redundant stacking
+  const [basePath, existingQuery] = trimmed.split('?');
+  const params = new URLSearchParams(existingQuery || '');
+  params.set('t', String(paramValue));
+
+  return `${basePath}?${params.toString()}`;
+}
+
+/**
+ * Resolves an image URL so it functions correctly regardless of host configuration.
+ * - Leaves data URIs untouched.
+ * - Replaces any `/src/assets/images/` path with public `/images/` path.
+ * - Appends a cache-busting query parameter (?t=...) to force browser re-fetch on update.
+ */
+export function resolveImageUrl(url?: string | null, cacheBust?: string | number | boolean): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  // Base64 data URLs work natively anywhere, never add query parameters
+  if (trimmed.startsWith('data:')) {
     return trimmed;
   }
+
+  let resolved = trimmed;
 
   // Normalize legacy `/src/assets/images/` or `src/assets/images/` to `/images/`
   if (trimmed.includes('assets/images/')) {
-    const filename = trimmed.split('/').pop();
-    return `/images/${filename}`;
+    const filename = trimmed.split('/').pop()?.split('?')[0];
+    resolved = `/images/${filename}`;
+  } else if (trimmed.startsWith('images/')) {
+    resolved = `/${trimmed}`;
   }
 
-  // If starts with `images/` without leading slash, add slash
-  if (trimmed.startsWith('images/')) {
-    return `/${trimmed}`;
+  // If cacheBust is explicitly false, return resolved without query params
+  if (cacheBust === false) {
+    return resolved;
   }
 
-  return trimmed;
+  return addCacheBuster(
+    resolved,
+    typeof cacheBust === 'number' || typeof cacheBust === 'string' ? cacheBust : undefined
+  );
 }
 
 /**
@@ -97,16 +142,16 @@ export function handleImageError(
   // Attempt 1: If currentSrc has /src/assets/images/, switch to /images/
   if (retryCount === 0 && currentSrc.includes('assets/images/')) {
     target.dataset.retryCount = '1';
-    const filename = currentSrc.split('/').pop();
-    target.src = `/images/${filename}`;
+    const filename = currentSrc.split('/').pop()?.split('?')[0];
+    target.src = addCacheBuster(`/images/${filename}`);
     return;
   }
 
   // Attempt 2: If currentSrc has /images/, try /src/assets/images/ (in local dev)
   if (retryCount === 0 && currentSrc.startsWith('/images/')) {
     target.dataset.retryCount = '1';
-    const filename = currentSrc.split('/').pop();
-    target.src = `/src/assets/images/${filename}`;
+    const filename = currentSrc.split('/').pop()?.split('?')[0];
+    target.src = addCacheBuster(`/src/assets/images/${filename}`);
     return;
   }
 
@@ -203,7 +248,7 @@ export async function processAndUploadImage(
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.url) {
-        return data.url;
+        return addCacheBuster(data.url, Date.now());
       }
     }
   } catch (err) {
