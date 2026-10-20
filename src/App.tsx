@@ -284,70 +284,95 @@ export default function App() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Fetch initial content from backend on mount and synchronize with browser
-  useEffect(() => {
-    fetch('/api/content')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data) {
-          const d = json.data;
-          const localSavedAt = localStorage.getItem('arrohmah_last_saved');
-          // If backend has saved data
-          if (d.savedAt) {
-            if (!localSavedAt || new Date(d.savedAt) >= new Date(localSavedAt)) {
-              if (d.mosqueInfo) {
-                setMosqueInfo(d.mosqueInfo);
-                localStorage.setItem('arrohmah_mosque_info', JSON.stringify(d.mosqueInfo));
-              }
-              if (d.members) {
-                const filtered = filterOnlyCoreLeaders(d.members);
-                setMembers(filtered);
-                localStorage.setItem('arrohmah_members', JSON.stringify(filtered));
-              }
-              if (d.galleryImages) {
-                setGalleryImages(d.galleryImages);
-                localStorage.setItem('arrohmah_gallery_images', JSON.stringify(d.galleryImages));
-              }
-              if (d.fridayOfficers) {
-                setFridayOfficers(d.fridayOfficers);
-                localStorage.setItem('arrohmah_friday_officers', JSON.stringify(d.fridayOfficers));
-              }
-              if (d.financialSummary) {
-                setFinancialSummary(d.financialSummary);
-                localStorage.setItem('arrohmah_financial_summary', JSON.stringify(d.financialSummary));
-              }
-              if (d.transactions) {
-                setTransactions(d.transactions);
-                localStorage.setItem('arrohmah_transactions', JSON.stringify(d.transactions));
-              }
-              if (d.agendaEvents) {
-                setAgendaEvents(d.agendaEvents);
-                localStorage.setItem('arrohmah_agenda_events', JSON.stringify(d.agendaEvents));
-              }
-              if (d.articles) {
-                setArticles(d.articles);
-                localStorage.setItem('arrohmah_articles', JSON.stringify(d.articles));
-              }
-              if (d.bankAccounts) {
-                setBankAccounts(d.bankAccounts);
-                localStorage.setItem('arrohmah_bank_accounts', JSON.stringify(d.bankAccounts));
-              }
-              if (d.facilities) {
-                setFacilities(d.facilities);
-                localStorage.setItem('arrohmah_facilities', JSON.stringify(d.facilities));
-              }
-              localStorage.setItem('arrohmah_last_saved', d.savedAt);
-            } else {
-              // LocalStorage has newer edits; sync them to backend!
-              saveAllToBackend();
+  // Multi-device backend sync function
+  const syncFromBackend = useCallback(async () => {
+    try {
+      const res = await fetch('/api/content');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        const localSavedAt = localStorage.getItem('arrohmah_last_saved');
+
+        // Apply backend data when opening on another device (PC, laptop, HP) or if backend is newer
+        if (d.savedAt) {
+          if (!localSavedAt || new Date(d.savedAt).getTime() >= new Date(localSavedAt).getTime()) {
+            if (d.mosqueInfo) {
+              setMosqueInfo(d.mosqueInfo);
+              try { localStorage.setItem('arrohmah_mosque_info', JSON.stringify(d.mosqueInfo)); } catch {}
             }
+            if (d.members) {
+              const filtered = filterOnlyCoreLeaders(d.members);
+              setMembers(filtered);
+              try { localStorage.setItem('arrohmah_members', JSON.stringify(filtered)); } catch {}
+            }
+            if (d.galleryImages) {
+              setGalleryImages(d.galleryImages);
+              try { localStorage.setItem('arrohmah_gallery_images', JSON.stringify(d.galleryImages)); } catch {}
+            }
+            if (d.fridayOfficers) {
+              setFridayOfficers(d.fridayOfficers);
+              try { localStorage.setItem('arrohmah_friday_officers', JSON.stringify(d.fridayOfficers)); } catch {}
+            }
+            if (d.financialSummary) {
+              setFinancialSummary(d.financialSummary);
+              try { localStorage.setItem('arrohmah_financial_summary', JSON.stringify(d.financialSummary)); } catch {}
+            }
+            if (d.transactions) {
+              setTransactions(d.transactions);
+              try { localStorage.setItem('arrohmah_transactions', JSON.stringify(d.transactions)); } catch {}
+            }
+            if (d.agendaEvents) {
+              setAgendaEvents(d.agendaEvents);
+              try { localStorage.setItem('arrohmah_agenda_events', JSON.stringify(d.agendaEvents)); } catch {}
+            }
+            if (d.articles) {
+              setArticles(d.articles);
+              try { localStorage.setItem('arrohmah_articles', JSON.stringify(d.articles)); } catch {}
+            }
+            if (d.bankAccounts) {
+              setBankAccounts(d.bankAccounts);
+              try { localStorage.setItem('arrohmah_bank_accounts', JSON.stringify(d.bankAccounts)); } catch {}
+            }
+            if (d.facilities) {
+              setFacilities(d.facilities);
+              try { localStorage.setItem('arrohmah_facilities', JSON.stringify(d.facilities)); } catch {}
+            }
+            try { localStorage.setItem('arrohmah_last_saved', d.savedAt); } catch {}
           }
         }
-      })
-      .catch(() => {
-        // Fallback to localStorage or mock
-      });
-  }, [saveAllToBackend]);
+      }
+    } catch (e) {
+      console.warn('Backend sync check notice:', e);
+    }
+  }, []);
+
+  // Fetch initial content from backend on mount and sync across devices
+  useEffect(() => {
+    syncFromBackend();
+
+    // Check for updates whenever user focuses the tab or returns to browser
+    const handleFocus = () => syncFromBackend();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncFromBackend();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Periodic sync poll every 25 seconds for multi-device sync (e.g. PC edits -> phone browser updates)
+    const pollTimer = setInterval(() => {
+      syncFromBackend();
+    }, 25000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(pollTimer);
+    };
+  }, [syncFromBackend]);
 
   // Keep live clock running
   useEffect(() => {

@@ -62,7 +62,7 @@ import {
   BankAccount,
   MosqueFacility,
 } from '../types';
-import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
+import { resolveImageUrl, handleImageError, processAndUploadImage } from '../utils/imageUtils';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -380,15 +380,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // QRIS image upload handler
-  const handleQrisUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrisUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onUpdateMosqueInfo({ ...mosqueInfo, qrisImageUrl: reader.result as string });
-        showToast('Gambar QRIS berhasil diperbarui!');
-      };
-      reader.readAsDataURL(file);
+      showToast('Mengompresi & mengunggah gambar QRIS ke server...');
+      try {
+        const url = await processAndUploadImage(file, 'qris_barcode');
+        onUpdateMosqueInfo({ ...mosqueInfo, qrisImageUrl: url });
+        showToast('Gambar QRIS berhasil diperbarui & tersimpan ke server!');
+      } catch (err: any) {
+        showToast('Gagal memproses gambar: ' + (err.message || 'Error'));
+      }
     }
   };
 
@@ -858,14 +860,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showToast('Semua perubahan berhasil disinkronkan & disimpan ke browser (localStorage) dan backend!');
   };
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      showToast('Mengompresi & mengunggah foto ke server...');
+      try {
+        const url = await processAndUploadImage(file, 'galeri_masjid');
+        setNewImagePreview(url);
+        showToast('Foto berhasil diproses & siap disimpan ke galeri!');
+      } catch (err: any) {
+        showToast('Gagal memproses foto: ' + (err.message || 'Error'));
+      }
     }
   };
 
@@ -886,7 +891,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewImageTitle('');
     setNewImageCaption('');
     setNewImagePreview(null);
-    showToast('Foto baru berhasil ditambahkan ke galeri!');
+    showToast('Foto baru berhasil ditambahkan & tersinkronkan ke server!');
   };
 
   const handleDeleteGalleryImage = (id: string) => {
@@ -897,19 +902,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // Member photo upload
-  const handleMemberPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, memberId: string) => {
+  const handleMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, memberId: string) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
+      showToast('Mengompresi & mengunggah foto pengurus ke server...');
+      try {
+        const url = await processAndUploadImage(file, `pengurus_${memberId}`);
         const updated = members.map((m) =>
-          m.id === memberId ? { ...m, avatarUrl: dataUrl } : m
+          m.id === memberId ? { ...m, avatarUrl: url } : m
         );
         onUpdateMembers(updated);
-        showToast('Foto pengurus berhasil diperbarui!');
-      };
-      reader.readAsDataURL(file);
+        showToast('Foto pengurus berhasil diperbarui & tersinkronkan ke semua perangkat!');
+      } catch (err: any) {
+        showToast('Gagal memproses foto: ' + (err.message || 'Error'));
+      }
     }
   };
 
@@ -1079,6 +1085,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     a.download = `backup_masjid_arrohmah_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Import full JSON backup
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const json = JSON.parse(event.target?.result as string);
+          if (json.mosqueInfo) onUpdateMosqueInfo(json.mosqueInfo);
+          if (json.members) onUpdateMembers(json.members);
+          if (json.galleryImages) onUpdateGalleryImages(json.galleryImages);
+          if (json.fridayOfficers) onUpdateFridayOfficers(json.fridayOfficers);
+          if (json.financialSummary) onUpdateFinancialSummary(json.financialSummary);
+          if (json.transactions) onUpdateTransactions(json.transactions);
+          if (json.agendaEvents) onUpdateAgendaEvents(json.agendaEvents);
+          if (json.articles) onUpdateArticles(json.articles);
+          if (json.bankAccounts) onUpdateBankAccounts(json.bankAccounts);
+          if (json.facilities) onUpdateFacilities(json.facilities);
+          showToast('Data website & gambar berhasil diimpor & disinkronkan!');
+          if (onSaveToBackend) onSaveToBackend();
+        } catch {
+          showToast('Format file cadangan JSON tidak valid!');
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   if (!isOpen) return null;
@@ -1513,14 +1547,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                onUpdateMosqueInfo({ ...mosqueInfo, heroImageUrl: reader.result as string });
-                              };
-                              reader.readAsDataURL(file);
+                              showToast('Mengompresi & mengunggah foto banner ke server...');
+                              try {
+                                const url = await processAndUploadImage(file, 'banner_hero');
+                                onUpdateMosqueInfo({ ...mosqueInfo, heroImageUrl: url });
+                                showToast('Foto banner hero berhasil diperbarui & tersinkronkan!');
+                              } catch (err: any) {
+                                showToast('Gagal memproses foto: ' + (err.message || 'Error'));
+                              }
                             }
                           }}
                         />
@@ -3793,28 +3830,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </p>
               </div>
 
-              <div className="space-y-3">
-                <button
-                  onClick={handleExportBackup}
-                  className="flex items-center gap-2 px-4 py-3 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
-                >
-                  <Download className="w-4 h-4 text-amber-300" />
-                  <span>Unduh File Cadangan (JSON Backup)</span>
-                </button>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={handleExportBackup}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+                  >
+                    <Download className="w-4 h-4 text-amber-300" />
+                    <span>Unduh Cadangan (JSON)</span>
+                  </button>
+
+                  <label className="cursor-pointer flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-emerald-50 text-emerald-900 border-2 border-dashed border-emerald-400 font-bold text-xs rounded-xl transition-colors">
+                    <Upload className="w-4 h-4 text-emerald-700" />
+                    <span>Impor / Pulihkan (JSON)</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportBackup}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Multi-device sync guide card */}
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-sm">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+                    <span>Sinkronisasi Lintas Perangkat (PC, Laptop & HP)</span>
+                  </div>
+                  <p className="text-emerald-800 leading-relaxed">
+                    Setiap kali Anda mengunggah atau mengedit gambar via Admin DKM, sistem kini secara otomatis:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 text-emerald-900 font-medium">
+                    <li>Mengompresi resolusi foto kamera HP/PC secara otomatis agar tidak membebani kuota memori browser (bebas dari error batas 5MB localStorage).</li>
+                    <li>Mengunggah file foto fisik ke server (<code className="bg-emerald-100 px-1 py-0.5 rounded font-mono text-[11px]">/images/...</code>) sehingga langsung dapat diakses oleh browser komputer, laptop, dan HP lain tanpa tergantung memori lokal perangkat.</li>
+                    <li>Menyimpan perubahan ke basis data server (<code className="bg-emerald-100 px-1 py-0.5 rounded font-mono text-[11px]">db.json</code>) yang disinkronkan ke seluruh jamaah.</li>
+                  </ul>
+                </div>
 
                 {onResetDefaults && (
-                  <button
-                    onClick={() => {
-                      if (confirm('Kembalikan semua data ke pengaturan awal? Perubahan yang belum dicadangkan akan direset.')) {
-                        onResetDefaults();
-                        showToast('Data berhasil dikembalikan ke standar awal.');
-                      }
-                    }}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors"
-                  >
-                    <RotateCcw className="w-4 h-4 text-slate-600" />
-                    <span>Reset ke Standar Awal</span>
-                  </button>
+                  <div className="pt-2 border-t">
+                    <button
+                      onClick={() => {
+                        if (confirm('Kembalikan semua data ke pengaturan awal? Perubahan yang belum dicadangkan akan direset.')) {
+                          onResetDefaults();
+                          showToast('Data berhasil dikembalikan ke standar awal.');
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors"
+                    >
+                      <RotateCcw className="w-4 h-4 text-slate-600" />
+                      <span>Reset ke Standar Awal</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
