@@ -16,7 +16,6 @@ import {
   Target,
   Building,
   Settings,
-  Music,
 } from 'lucide-react';
 import { MOSQUE_INFO } from '../data/mockData';
 import { MosqueInfo } from '../types';
@@ -25,13 +24,12 @@ import { calculatePrayerTimes, getUpcomingPrayerInfo, getHijriDate } from '../ut
 interface NavbarProps {
   onOpenTvMode: () => void;
   onOpenAdmin: () => void;
-  onOpenMusic?: () => void;
   activeSection: string;
   onNavigate: (sectionId: string) => void;
   mosqueInfo?: MosqueInfo;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenTvMode, onOpenAdmin, onOpenMusic, activeSection, onNavigate, mosqueInfo }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenTvMode, onOpenAdmin, activeSection, onNavigate, mosqueInfo }) => {
   const info = mosqueInfo || MOSQUE_INFO;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -187,17 +185,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenTvMode, onOpenAdmin, onOpe
               <span>Admin DKM</span>
             </button>
 
-            {onOpenMusic && (
-              <button
-                onClick={onOpenMusic}
-                title="Studio Musik & Instrumen Islami (Lyria AI)"
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors shadow-2xs"
-              >
-                <Music className="w-3.5 h-3.5 text-purple-700" />
-                <span>Musik Lyria</span>
-              </button>
-            )}
-
             <button
               onClick={onOpenTvMode}
               title="Tampilkan Mode Layar TV Masjid (Digital Signage)"
@@ -269,19 +256,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenTvMode, onOpenAdmin, onOpe
               })}
 
               <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2">
-                {onOpenMusic && (
-                  <button
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      onOpenMusic();
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold text-sm rounded-lg border border-purple-200"
-                  >
-                    <Music className="w-4 h-4 text-purple-700" />
-                    <span>Studio Musik Islami (Lyria AI)</span>
-                  </button>
-                )}
-
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);

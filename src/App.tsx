@@ -14,8 +14,6 @@ import { ContactSection } from './components/ContactSection';
 import { MosqueTVMode } from './components/MosqueTVMode';
 import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
-import { AiChatbot } from './components/AiChatbot';
-import { MusicGeneratorModal } from './components/MusicGeneratorModal';
 import {
   MOSQUE_INFO,
   COMMITTEE_MEMBERS,
@@ -96,7 +94,6 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [tvModeOpen, setTvModeOpen] = useState<boolean>(false);
   const [adminOpen, setAdminOpen] = useState<boolean>(false);
-  const [musicModalOpen, setMusicModalOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('beranda');
 
   // 1. Mosque Info & Wording (with cache-busting for image URLs from localStorage)
@@ -253,16 +250,20 @@ export default function App() {
     facilities,
   ]);
 
-  // Persist full state to browser localStorage and backend
-  const saveAllToBackend = useCallback(async () => {
-    const currentState = stateRef.current;
+  // Persist full state to browser localStorage and backend server
+  const saveAllToBackend = useCallback(async (stateOverride?: Partial<typeof stateRef.current>): Promise<boolean> => {
+    const currentState = {
+      ...stateRef.current,
+      ...(stateOverride || {}),
+    };
+    stateRef.current = currentState;
     const nowIso = new Date().toISOString();
     const payload = {
       ...currentState,
       savedAt: nowIso,
     };
 
-    // 1. Immediately save to browser localStorage
+    // 1. Immediately save to browser localStorage for offline fallback
     try {
       localStorage.setItem('arrohmah_mosque_info', JSON.stringify(currentState.mosqueInfo));
       localStorage.setItem('arrohmah_members', JSON.stringify(currentState.members));
@@ -279,7 +280,7 @@ export default function App() {
 
     // 2. Persist to Express backend file database (db.json)
     try {
-      await fetch('/api/content', {
+      const res = await fetch('/api/content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -287,12 +288,29 @@ export default function App() {
         },
         body: JSON.stringify({ ...payload, adminEmail: 'mjdarrohmah@gmail.com' }),
       });
+
+      if (res.ok) {
+        const json = await res.json();
+        const serverStamp = json.savedAt || nowIso;
+        try { localStorage.setItem('arrohmah_last_saved', serverStamp); } catch {}
+
+        // Broadcast to other tabs on the same device
+        try {
+          if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+            const bc = new BroadcastChannel('arrohmah_sync');
+            bc.postMessage({ type: 'content_updated', savedAt: serverStamp });
+            bc.close();
+          }
+        } catch {}
+        return true;
+      }
     } catch (e) {
       console.warn('Backend API sync notice:', e);
     }
+    return false;
   }, []);
 
-  // Debounced auto-save timer
+  // Debounced auto-save timer for real-time text input changes
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const triggerAutoSave = useCallback(() => {
@@ -301,89 +319,83 @@ export default function App() {
     }
     autoSaveTimerRef.current = setTimeout(() => {
       saveAllToBackend();
-    }, 600);
+    }, 400);
   }, [saveAllToBackend]);
 
-  // Multi-tab sync: Listen to changes made in other browser tabs or windows
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (!e.key || !e.newValue) return;
-      try {
-        const val = JSON.parse(e.newValue);
-        const savedAt = localStorage.getItem('arrohmah_last_saved');
-        if (e.key === 'arrohmah_mosque_info') setMosqueInfo(applyImageCacheBusterToMosqueInfo(val, savedAt || undefined));
-        if (e.key === 'arrohmah_members') setMembers(filterOnlyCoreLeaders(applyImageCacheBusterToMembers(val, savedAt || undefined)));
-        if (e.key === 'arrohmah_gallery_images') setGalleryImages(applyImageCacheBusterToGallery(val, savedAt || undefined));
-        if (e.key === 'arrohmah_friday_officers') setFridayOfficers(val);
-        if (e.key === 'arrohmah_financial_summary') setFinancialSummary(val);
-        if (e.key === 'arrohmah_transactions') setTransactions(val);
-        if (e.key === 'arrohmah_agenda_events') setAgendaEvents(val);
-        if (e.key === 'arrohmah_articles') setArticles(val);
-        if (e.key === 'arrohmah_bank_accounts') setBankAccounts(val);
-        if (e.key === 'arrohmah_facilities') setFacilities(val);
-      } catch {}
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  // Multi-device backend sync function
-  const syncFromBackend = useCallback(async () => {
+  // Multi-device backend sync function: Ensures ALL visitors on PC, Laptop, and HP see latest edits
+  const syncFromBackend = useCallback(async (force = false) => {
     try {
-      const res = await fetch('/api/content');
+      const res = await fetch(`/api/content?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache',
+        },
+      });
       if (!res.ok) return;
       const json = await res.json();
       if (json.success && json.data) {
         const d = json.data;
         const localSavedAt = localStorage.getItem('arrohmah_last_saved');
 
-        // Apply backend data when opening on another device (PC, laptop, HP) or if backend is newer
-        if (d.savedAt) {
-          if (!localSavedAt || new Date(d.savedAt).getTime() >= new Date(localSavedAt).getTime()) {
-            if (d.mosqueInfo) {
-              const updated = applyImageCacheBusterToMosqueInfo(d.mosqueInfo, d.savedAt);
-              setMosqueInfo(updated);
-              try { localStorage.setItem('arrohmah_mosque_info', JSON.stringify(updated)); } catch {}
-            }
-            if (d.members) {
-              const filtered = filterOnlyCoreLeaders(applyImageCacheBusterToMembers(d.members, d.savedAt));
-              setMembers(filtered);
-              try { localStorage.setItem('arrohmah_members', JSON.stringify(filtered)); } catch {}
-            }
-            if (d.galleryImages) {
-              const updated = applyImageCacheBusterToGallery(d.galleryImages, d.savedAt);
-              setGalleryImages(updated);
-              try { localStorage.setItem('arrohmah_gallery_images', JSON.stringify(updated)); } catch {}
-            }
-            if (d.fridayOfficers) {
-              setFridayOfficers(d.fridayOfficers);
-              try { localStorage.setItem('arrohmah_friday_officers', JSON.stringify(d.fridayOfficers)); } catch {}
-            }
-            if (d.financialSummary) {
-              setFinancialSummary(d.financialSummary);
-              try { localStorage.setItem('arrohmah_financial_summary', JSON.stringify(d.financialSummary)); } catch {}
-            }
-            if (d.transactions) {
-              setTransactions(d.transactions);
-              try { localStorage.setItem('arrohmah_transactions', JSON.stringify(d.transactions)); } catch {}
-            }
-            if (d.agendaEvents) {
-              setAgendaEvents(d.agendaEvents);
-              try { localStorage.setItem('arrohmah_agenda_events', JSON.stringify(d.agendaEvents)); } catch {}
-            }
-            if (d.articles) {
-              setArticles(d.articles);
-              try { localStorage.setItem('arrohmah_articles', JSON.stringify(d.articles)); } catch {}
-            }
-            if (d.bankAccounts) {
-              setBankAccounts(d.bankAccounts);
-              try { localStorage.setItem('arrohmah_bank_accounts', JSON.stringify(d.bankAccounts)); } catch {}
-            }
-            if (d.facilities) {
-              setFacilities(d.facilities);
-              try { localStorage.setItem('arrohmah_facilities', JSON.stringify(d.facilities)); } catch {}
-            }
+        // Apply backend data if force, or if local is empty, or if backend has newer or updated timestamp
+        const shouldApply = force || !localSavedAt || !d.savedAt || d.savedAt !== localSavedAt || (new Date(d.savedAt).getTime() >= new Date(localSavedAt).getTime());
+
+        if (shouldApply) {
+          if (d.mosqueInfo) {
+            const updated = applyImageCacheBusterToMosqueInfo(d.mosqueInfo, d.savedAt);
+            setMosqueInfo(updated);
+            stateRef.current.mosqueInfo = updated;
+            try { localStorage.setItem('arrohmah_mosque_info', JSON.stringify(updated)); } catch {}
+          }
+          if (d.members && Array.isArray(d.members) && d.members.length > 0) {
+            const updated = filterOnlyCoreLeaders(applyImageCacheBusterToMembers(d.members, d.savedAt));
+            setMembers(updated);
+            stateRef.current.members = updated;
+            try { localStorage.setItem('arrohmah_members', JSON.stringify(updated)); } catch {}
+          }
+          if (d.galleryImages && Array.isArray(d.galleryImages)) {
+            const updated = applyImageCacheBusterToGallery(d.galleryImages, d.savedAt);
+            setGalleryImages(updated);
+            stateRef.current.galleryImages = updated;
+            try { localStorage.setItem('arrohmah_gallery_images', JSON.stringify(updated)); } catch {}
+          }
+          if (d.fridayOfficers) {
+            setFridayOfficers(d.fridayOfficers);
+            stateRef.current.fridayOfficers = d.fridayOfficers;
+            try { localStorage.setItem('arrohmah_friday_officers', JSON.stringify(d.fridayOfficers)); } catch {}
+          }
+          if (d.financialSummary) {
+            setFinancialSummary(d.financialSummary);
+            stateRef.current.financialSummary = d.financialSummary;
+            try { localStorage.setItem('arrohmah_financial_summary', JSON.stringify(d.financialSummary)); } catch {}
+          }
+          if (d.transactions) {
+            setTransactions(d.transactions);
+            stateRef.current.transactions = d.transactions;
+            try { localStorage.setItem('arrohmah_transactions', JSON.stringify(d.transactions)); } catch {}
+          }
+          if (d.agendaEvents) {
+            setAgendaEvents(d.agendaEvents);
+            stateRef.current.agendaEvents = d.agendaEvents;
+            try { localStorage.setItem('arrohmah_agenda_events', JSON.stringify(d.agendaEvents)); } catch {}
+          }
+          if (d.articles) {
+            setArticles(d.articles);
+            stateRef.current.articles = d.articles;
+            try { localStorage.setItem('arrohmah_articles', JSON.stringify(d.articles)); } catch {}
+          }
+          if (d.bankAccounts) {
+            setBankAccounts(d.bankAccounts);
+            stateRef.current.bankAccounts = d.bankAccounts;
+            try { localStorage.setItem('arrohmah_bank_accounts', JSON.stringify(d.bankAccounts)); } catch {}
+          }
+          if (d.facilities) {
+            setFacilities(d.facilities);
+            stateRef.current.facilities = d.facilities;
+            try { localStorage.setItem('arrohmah_facilities', JSON.stringify(d.facilities)); } catch {}
+          }
+          if (d.savedAt) {
             try { localStorage.setItem('arrohmah_last_saved', d.savedAt); } catch {}
           }
         }
@@ -393,25 +405,100 @@ export default function App() {
     }
   }, []);
 
+  // Multi-tab sync: Listen to changes made in other browser tabs or windows
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.key || !e.newValue) return;
+      try {
+        const val = JSON.parse(e.newValue);
+        const savedAt = localStorage.getItem('arrohmah_last_saved');
+        if (e.key === 'arrohmah_mosque_info') {
+          const updated = applyImageCacheBusterToMosqueInfo(val, savedAt || undefined);
+          setMosqueInfo(updated);
+          stateRef.current.mosqueInfo = updated;
+        }
+        if (e.key === 'arrohmah_members') {
+          const updated = filterOnlyCoreLeaders(applyImageCacheBusterToMembers(val, savedAt || undefined));
+          setMembers(updated);
+          stateRef.current.members = updated;
+        }
+        if (e.key === 'arrohmah_gallery_images') {
+          const updated = applyImageCacheBusterToGallery(val, savedAt || undefined);
+          setGalleryImages(updated);
+          stateRef.current.galleryImages = updated;
+        }
+        if (e.key === 'arrohmah_friday_officers') {
+          setFridayOfficers(val);
+          stateRef.current.fridayOfficers = val;
+        }
+        if (e.key === 'arrohmah_financial_summary') {
+          setFinancialSummary(val);
+          stateRef.current.financialSummary = val;
+        }
+        if (e.key === 'arrohmah_transactions') {
+          setTransactions(val);
+          stateRef.current.transactions = val;
+        }
+        if (e.key === 'arrohmah_agenda_events') {
+          setAgendaEvents(val);
+          stateRef.current.agendaEvents = val;
+        }
+        if (e.key === 'arrohmah_articles') {
+          setArticles(val);
+          stateRef.current.articles = val;
+        }
+        if (e.key === 'arrohmah_bank_accounts') {
+          setBankAccounts(val);
+          stateRef.current.bankAccounts = val;
+        }
+        if (e.key === 'arrohmah_facilities') {
+          setFacilities(val);
+          stateRef.current.facilities = val;
+        }
+      } catch {}
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Cross-tab BroadcastChannel listener for instant intra-browser sync
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('arrohmah_sync');
+        bc.onmessage = () => {
+          syncFromBackend(true);
+        };
+      }
+    } catch {}
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      if (bc) bc.close();
+    };
+  }, [syncFromBackend]);
+
   // Fetch initial content from backend on mount and sync across devices
   useEffect(() => {
-    syncFromBackend();
+    // Unconditionally sync from backend on mount so visitors immediately receive latest database state
+    syncFromBackend(true);
 
     // Check for updates whenever user focuses the tab or returns to browser
-    const handleFocus = () => syncFromBackend();
+    const handleFocus = () => syncFromBackend(true);
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncFromBackend();
+        syncFromBackend(true);
       }
     };
 
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Periodic sync poll every 25 seconds for multi-device sync (e.g. PC edits -> phone browser updates)
+    // Periodic sync poll every 10 seconds for real-time multi-device sync (e.g. laptop edits -> phone browser updates)
     const pollTimer = setInterval(() => {
-      syncFromBackend();
-    }, 25000);
+      if (document.visibilityState === 'visible') {
+        syncFromBackend(false);
+      }
+    }, 10000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -503,11 +590,12 @@ export default function App() {
     } catch {}
   };
 
-  // Synchronized Update Handlers (React State + localStorage + Auto-Sync Backend)
+  // Synchronized Update Handlers (React State + stateRef + localStorage + Auto-Sync Backend)
   const handleUpdateMosqueInfo = (info: MosqueInfo) => {
     const nowIso = new Date().toISOString();
     const withCacheBuster = applyImageCacheBusterToMosqueInfo(info, nowIso);
     setMosqueInfo(withCacheBuster);
+    stateRef.current.mosqueInfo = withCacheBuster;
     try {
       localStorage.setItem('arrohmah_mosque_info', JSON.stringify(withCacheBuster));
       localStorage.setItem('arrohmah_last_saved', nowIso);
@@ -519,6 +607,7 @@ export default function App() {
     const nowIso = new Date().toISOString();
     const filtered = filterOnlyCoreLeaders(applyImageCacheBusterToMembers(newMembers, nowIso));
     setMembers(filtered);
+    stateRef.current.members = filtered;
     try {
       localStorage.setItem('arrohmah_members', JSON.stringify(filtered));
       localStorage.setItem('arrohmah_last_saved', nowIso);
@@ -530,6 +619,7 @@ export default function App() {
     const nowIso = new Date().toISOString();
     const withCacheBuster = applyImageCacheBusterToGallery(images, nowIso);
     setGalleryImages(withCacheBuster);
+    stateRef.current.galleryImages = withCacheBuster;
     try {
       localStorage.setItem('arrohmah_gallery_images', JSON.stringify(withCacheBuster));
       localStorage.setItem('arrohmah_last_saved', nowIso);
@@ -538,64 +628,78 @@ export default function App() {
   };
 
   const handleUpdateFridayOfficers = (officers: FridayOfficer[]) => {
+    const nowIso = new Date().toISOString();
     setFridayOfficers(officers);
+    stateRef.current.fridayOfficers = officers;
     try {
       localStorage.setItem('arrohmah_friday_officers', JSON.stringify(officers));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateFinancialSummary = (newSummary: FinancialSummary) => {
+    const nowIso = new Date().toISOString();
     setFinancialSummary(newSummary);
+    stateRef.current.financialSummary = newSummary;
     try {
       localStorage.setItem('arrohmah_financial_summary', JSON.stringify(newSummary));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateTransactions = (newTxs: FinancialTransaction[]) => {
+    const nowIso = new Date().toISOString();
     setTransactions(newTxs);
+    stateRef.current.transactions = newTxs;
     try {
       localStorage.setItem('arrohmah_transactions', JSON.stringify(newTxs));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateAgendaEvents = (newEvents: AgendaEvent[]) => {
+    const nowIso = new Date().toISOString();
     setAgendaEvents(newEvents);
+    stateRef.current.agendaEvents = newEvents;
     try {
       localStorage.setItem('arrohmah_agenda_events', JSON.stringify(newEvents));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateArticles = (newArticles: Article[]) => {
+    const nowIso = new Date().toISOString();
     setArticles(newArticles);
+    stateRef.current.articles = newArticles;
     try {
       localStorage.setItem('arrohmah_articles', JSON.stringify(newArticles));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateBankAccounts = (newAccounts: BankAccount[]) => {
+    const nowIso = new Date().toISOString();
     setBankAccounts(newAccounts);
+    stateRef.current.bankAccounts = newAccounts;
     try {
       localStorage.setItem('arrohmah_bank_accounts', JSON.stringify(newAccounts));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
 
   const handleUpdateFacilities = (newFacilities: MosqueFacility[]) => {
+    const nowIso = new Date().toISOString();
     setFacilities(newFacilities);
+    stateRef.current.facilities = newFacilities;
     try {
       localStorage.setItem('arrohmah_facilities', JSON.stringify(newFacilities));
-      localStorage.setItem('arrohmah_last_saved', new Date().toISOString());
+      localStorage.setItem('arrohmah_last_saved', nowIso);
     } catch {}
     triggerAutoSave();
   };
@@ -669,7 +773,6 @@ export default function App() {
       <Navbar
         onOpenTvMode={() => setTvModeOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
-        onOpenMusic={() => setMusicModalOpen(true)}
         activeSection={activeSection}
         onNavigate={handleNavigate}
         mosqueInfo={mosqueInfo}
@@ -746,15 +849,6 @@ export default function App() {
         onOpenTvMode={() => setTvModeOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
         mosqueInfo={mosqueInfo}
-      />
-
-      {/* Gemini AI Multi-turn Chatbot Assistant */}
-      <AiChatbot />
-
-      {/* Lyria Music & Instrumental Generator Modal */}
-      <MusicGeneratorModal
-        isOpen={musicModalOpen}
-        onClose={() => setMusicModalOpen(false)}
       />
     </div>
   );

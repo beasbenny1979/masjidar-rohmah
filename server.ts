@@ -2,7 +2,6 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,15 +26,27 @@ const assetsImagesDir = path.resolve(__dirname, 'src/assets/images');
 });
 
 // Serve uploaded and static images across multiple routes for maximum hosting compatibility
-app.use('/images', express.static(publicImagesDir));
-app.use('/uploads', express.static(publicUploadsDir));
-app.use('/src/assets/images', express.static(publicImagesDir));
+// Set short cache & revalidate so updated images are immediately fetched on all devices
+const staticImageOptions = {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res: express.Response) => {
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, must-revalidate');
+  },
+};
+app.use('/images', express.static(publicImagesDir, staticImageOptions));
+app.use('/uploads', express.static(publicUploadsDir, staticImageOptions));
+app.use('/src/assets/images', express.static(publicImagesDir, staticImageOptions));
 if (fs.existsSync(assetsImagesDir)) {
-  app.use('/src/assets/images', express.static(assetsImagesDir));
+  app.use('/src/assets/images', express.static(assetsImagesDir, staticImageOptions));
 }
 
-// API 1: Get Content
+// API 1: Get Content - Strict No-Cache so mobile browsers and other PCs always get latest DB
 app.get('/api/content', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   try {
     if (fs.existsSync(dbPath)) {
       const data = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
@@ -97,7 +108,7 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-// API 2: Save Content
+// API 2: Save Content - Always timestamps with current ISO time so all devices immediately synchronize
 app.post('/api/content', (req, res) => {
   try {
     const adminEmail = (req.headers['x-admin-email'] as string) || req.body?.adminEmail;
@@ -108,9 +119,15 @@ app.post('/api/content', (req, res) => {
       });
     }
 
-    const data = req.body;
+    const savedAt = new Date().toISOString();
+    const data = {
+      ...req.body,
+      savedAt,
+      adminEmail: AUTHORIZED_ADMIN_EMAIL,
+    };
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
-    return res.json({ success: true, message: 'Data saved successfully' });
+    console.log(`[Content Database Saved] Stamped at ${savedAt}`);
+    return res.json({ success: true, savedAt, message: 'Data saved successfully' });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -174,147 +191,6 @@ app.post('/api/reset', (_req, res) => {
     }
     return res.json({ success: true, message: 'Database reset successfully' });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// API 5: Multi-turn Gemini Chatbot with Model Selection & System Instruction
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { messages, taskType, model, customRole } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        error: 'Kunci API Gemini (GEMINI_API_KEY) belum terkonfigurasi di lingkungan server.',
-      });
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-
-    // Select model based on task complexity as instructed:
-    // - gemini-4-argon for particularly complex tasks
-    // - gemini-3.8-flash for general tasks
-    // - gemini-3.1-flash-lite for tasks that should happen fast
-    let selectedModel = 'gemini-3.8-flash';
-    if (model === 'gemini-4-argon' || taskType === 'complex') {
-      selectedModel = 'gemini-4-argon';
-    } else if (model === 'gemini-3.1-flash-lite' || taskType === 'fast') {
-      selectedModel = 'gemini-3.1-flash-lite';
-    } else if (model) {
-      selectedModel = model;
-    }
-
-    // Grounding data from current mosque database
-    let groundingContext = '';
-    try {
-      if (fs.existsSync(dbPath)) {
-        const d = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-        if (d.mosqueInfo) {
-          groundingContext += `\nNama Masjid: ${d.mosqueInfo.name}\nTagline: ${d.mosqueInfo.tagline}\nAlamat: ${d.mosqueInfo.address}\nTelepon/WA: ${d.mosqueInfo.phone}\nEmail: ${d.mosqueInfo.email}\nSK Kemenag: ${d.mosqueInfo.dkmSkNumber}\nTahun Berdiri: ${d.mosqueInfo.establishedYear}\nArah Kiblat: ${d.mosqueInfo.qiblaDirection}\nSejarah: ${d.mosqueInfo.historyText}\nVisi: ${d.mosqueInfo.visionText}`;
-        }
-        if (d.financialSummary) {
-          groundingContext += `\nTotal Saldo Kas: Rp ${Number(d.financialSummary.totalBalance).toLocaleString('id-ID')}\nKas Operasional: Rp ${Number(d.financialSummary.operasionalBalance).toLocaleString('id-ID')}\nKas Pembangunan: Rp ${Number(d.financialSummary.pembangunanBalance).toLocaleString('id-ID')}\nKas ZISWAF & Yatim: Rp ${Number(d.financialSummary.ziswafBalance + d.financialSummary.yatimBalance).toLocaleString('id-ID')}\nStatus Rekonsiliasi Kas: ${d.financialSummary.lastReconciledAt || d.financialSummary.lastUpdated}`;
-        }
-      }
-    } catch {}
-
-    const roleName = customRole || 'Asisten Cerdas Virtual DKM Masjid Ar-Rohmah Rangkasbitung';
-    const systemInstruction = `Anda adalah "${roleName}", asisten virtual resmi DKM Masjid Ar-Rohmah di Komplek Bumi Narimbang Indah, Rangkasbitung, Kabupaten Lebak, Banten.
-Tugas Anda adalah melayani jamaah dengan ramah, santun, bijaksana, dan bernuansa Islami.
-Gunakan salam pembuka islami (Assalamu'alaikum Warahmatullahi Wabarakatuh), bismillah, alhamdulillah, dan kata-kata penyejuk hati.
-
-Informasi resmi masjid yang dapat Anda rujuk:
-${groundingContext}
-Pimpinan DKM: Bapak Rafiudin (Pelindung), Bapak Adih (Ketua DKM), Bapak Heri Kristiyanto (Bendahara DKM).
-Layanan Jamaah: Fardhu Kifayah & Mobil Jenazah 24 Jam, Bimbingan Mualaf, Konsultasi Agama, Peminjaman Aula/Akad Nikah, Jemput ZISWAF.
-Transparansi: Seluruh kas dicatat berkala dan terekonsiliasi rapi.
-
-Bantulah jamaah dengan jawaban yang jelas, terstruktur (bullet points), ringkas, dan menenangkan hati.`;
-
-    const contents = (messages || []).map((m: any) => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }],
-    }));
-
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents: contents,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-      },
-    });
-
-    const reply = response.text || 'Mohon maaf, saat ini asisten belum dapat memberikan jawaban.';
-    return res.json({ success: true, reply, modelUsed: selectedModel });
-  } catch (err: any) {
-    console.error('Gemini chat API error:', err);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// API 6: Lyria Music Generation (lyria-3-clip-preview for <= 30s clips, lyria-3-pro-preview for full-length)
-app.post('/api/music/generate', async (req, res) => {
-  try {
-    const { prompt, type } = req.body; // type: 'clip' (up to 30s) or 'pro' (full-length track)
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        error: 'Kunci API Gemini (GEMINI_API_KEY) belum terkonfigurasi di lingkungan server.',
-      });
-    }
-
-    if (!prompt) {
-      return res.status(400).json({ success: false, error: 'Prompt musik diperlukan' });
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-    const selectedModel = type === 'pro' ? 'lyria-3-pro-preview' : 'lyria-3-clip-preview';
-
-    const response = await ai.models.generateContentStream({
-      model: selectedModel,
-      contents: prompt,
-    });
-
-    let audioBase64 = '';
-    let lyrics = '';
-    let mimeType = 'audio/wav';
-
-    for await (const chunk of response) {
-      const parts = chunk.candidates?.[0]?.content?.parts;
-      if (!parts) continue;
-
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          if (!audioBase64 && part.inlineData.mimeType) {
-            mimeType = part.inlineData.mimeType;
-          }
-          audioBase64 += part.inlineData.data;
-        }
-        if (part.text && !lyrics) {
-          lyrics = part.text;
-        }
-      }
-    }
-
-    if (!audioBase64) {
-      return res.status(500).json({
-        success: false,
-        error: 'Model Lyria tidak menghasilkan stream audio. Pastikan prompt musik valid.',
-      });
-    }
-
-    return res.json({
-      success: true,
-      audioBase64,
-      mimeType,
-      lyrics,
-      modelUsed: selectedModel,
-    });
-  } catch (err: any) {
-    console.error('Lyria music generation API error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

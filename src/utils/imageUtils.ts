@@ -62,30 +62,27 @@ export function addCacheBuster(
   if (!trimmed) return '';
 
   // Data URLs (base64 or inline svg) must never receive query parameters
-  if (trimmed.startsWith('data:')) {
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
     return trimmed;
   }
 
-  // Determine timestamp/parameter value
-  let paramValue = customParam;
-  if (!paramValue) {
+  const [basePath, existingQuery] = trimmed.split('?');
+  const params = new URLSearchParams(existingQuery || '');
+
+  if (customParam) {
+    // Explicit custom timestamp or version supplied
+    params.set('t', typeof customParam === 'string' && isNaN(Number(customParam)) ? String(new Date(customParam).getTime() || customParam) : String(customParam));
+  } else if (!params.has('t')) {
+    // Fall back to saved timestamp or current timestamp
+    let paramValue: string | number | null = null;
     try {
       const savedAt = typeof window !== 'undefined' ? localStorage.getItem('arrohmah_last_saved') : null;
       if (savedAt) {
         paramValue = new Date(savedAt).getTime();
       }
     } catch {}
+    params.set('t', String(paramValue || Date.now()));
   }
-
-  // If still not available, use current timestamp
-  if (!paramValue) {
-    paramValue = Date.now();
-  }
-
-  // Strip existing t= parameter to avoid redundant stacking
-  const [basePath, existingQuery] = trimmed.split('?');
-  const params = new URLSearchParams(existingQuery || '');
-  params.set('t', String(paramValue));
 
   return `${basePath}?${params.toString()}`;
 }

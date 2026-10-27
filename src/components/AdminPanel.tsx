@@ -88,7 +88,7 @@ interface AdminPanelProps {
   onUpdateBankAccounts: (accounts: BankAccount[]) => void;
   facilities: MosqueFacility[];
   onUpdateFacilities: (facilities: MosqueFacility[]) => void;
-  onSaveToBackend?: () => Promise<void>;
+  onSaveToBackend?: (stateOverride?: any) => Promise<boolean | void>;
   onResetDefaults?: () => void;
 }
 
@@ -387,7 +387,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       try {
         const url = await processAndUploadImage(file, 'qris_barcode');
         onUpdateMosqueInfo({ ...mosqueInfo, qrisImageUrl: url });
-        showToast('Gambar QRIS berhasil diperbarui & tersimpan ke server!');
+        if (onSaveToBackend) {
+          setTimeout(() => { onSaveToBackend(); }, 50);
+        }
+        showToast('Gambar QRIS berhasil diperbarui & langsung tersimpan untuk semua pengunjung!');
       } catch (err: any) {
         showToast('Gagal memproses gambar: ' + (err.message || 'Error'));
       }
@@ -853,11 +856,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showToast('Template Excel berhasil diunduh!');
   };
 
+  const [isSavingManual, setIsSavingManual] = useState(false);
+
   const handleManualSave = async () => {
-    if (onSaveToBackend) {
-      await onSaveToBackend();
+    setIsSavingManual(true);
+    try {
+      if (onSaveToBackend) {
+        await onSaveToBackend();
+      }
+      showToast('Berhasil! Seluruh data tersimpan ke server database & langsung aktif untuk semua pengunjung di komputer, laptop, dan HP.');
+    } catch {
+      showToast('Peringatan: Gagal menyimpan ke server backend.');
+    } finally {
+      setIsSavingManual(false);
     }
-    showToast('Semua perubahan berhasil disinkronkan & disimpan ke browser (localStorage) dan backend!');
   };
 
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -891,13 +903,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewImageTitle('');
     setNewImageCaption('');
     setNewImagePreview(null);
-    showToast('Foto baru berhasil ditambahkan & tersinkronkan ke server!');
+    if (onSaveToBackend) {
+      setTimeout(() => { onSaveToBackend(); }, 50);
+    }
+    showToast('Foto baru berhasil ditambahkan & langsung tersimpan ke server pusat!');
   };
 
   const handleDeleteGalleryImage = (id: string) => {
     if (confirm('Hapus foto ini dari galeri?')) {
       onUpdateGalleryImages(galleryImages.filter((img) => img.id !== id));
-      showToast('Foto berhasil dihapus.');
+      if (onSaveToBackend) {
+        setTimeout(() => { onSaveToBackend(); }, 50);
+      }
+      showToast('Foto berhasil dihapus & disinkronkan ke server.');
     }
   };
 
@@ -912,7 +930,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           m.id === memberId ? { ...m, avatarUrl: url } : m
         );
         onUpdateMembers(updated);
-        showToast('Foto pengurus berhasil diperbarui & tersinkronkan ke semua perangkat!');
+        if (onSaveToBackend) {
+          setTimeout(() => { onSaveToBackend(); }, 50);
+        }
+        showToast('Foto pengurus berhasil diperbarui & langsung tersimpan ke server untuk semua pengunjung!');
       } catch (err: any) {
         showToast('Gagal memproses foto: ' + (err.message || 'Error'));
       }
@@ -1328,11 +1349,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <button
               onClick={handleManualSave}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-md transition-all"
-              title="Paksa sinkronisasi dan simpan seluruh data sekarang"
+              disabled={isSavingManual}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 disabled:opacity-60 text-slate-950 font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+              title="Paksa sinkronisasi dan simpan seluruh data ke server sekarang"
             >
-              <Save className="w-4 h-4" />
-              <span>Simpan & Sinkronkan</span>
+              {isSavingManual ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>Menyimpan ke Server...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Simpan & Sinkronkan</span>
+                </>
+              )}
             </button>
 
             <button
@@ -1554,7 +1585,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               try {
                                 const url = await processAndUploadImage(file, 'banner_hero');
                                 onUpdateMosqueInfo({ ...mosqueInfo, heroImageUrl: url });
-                                showToast('Foto banner hero berhasil diperbarui & tersinkronkan!');
+                                if (onSaveToBackend) {
+                                  setTimeout(() => { onSaveToBackend(); }, 50);
+                                }
+                                showToast('Foto banner hero berhasil diperbarui & langsung tersimpan untuk semua pengunjung!');
                               } catch (err: any) {
                                 showToast('Gagal memproses foto: ' + (err.message || 'Error'));
                               }
@@ -3906,10 +3940,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
             <button
               onClick={handleManualSave}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white font-bold shadow-xs transition-colors"
+              disabled={isSavingManual}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white font-bold shadow-xs transition-colors cursor-pointer"
             >
-              <Save className="w-4 h-4 text-amber-300" />
-              <span>Simpan & Sinkronkan Sekarang</span>
+              {isSavingManual ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin text-amber-300" />
+                  <span>Menyimpan ke Server...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 text-amber-300" />
+                  <span>Simpan & Sinkronkan Sekarang</span>
+                </>
+              )}
             </button>
           </div>
         </div>
