@@ -337,24 +337,8 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     bankName: 'Bank Syariah Indonesia (BSI)',
     accountNumber: '7182938401',
     accountHolder: 'DKM MASJID AR ROHMAH NARIMBANG',
-    badge: 'Rekening Utama ZISWAF',
+    badge: 'Rekening Utama',
     logoText: 'BSI',
-  },
-  {
-    id: 'bank-2',
-    bankName: 'Bank BJB Syariah',
-    accountNumber: '521020088190',
-    accountHolder: 'MASJID AR ROHMAH BUMI NARIMBANG',
-    badge: 'Kas Pembangunan & Operasional',
-    logoText: 'BJB Syariah',
-  },
-  {
-    id: 'bank-3',
-    bankName: 'Bank Mandiri',
-    accountNumber: '1630009841235',
-    accountHolder: 'DKM AR-ROHMAH NARIMBANG INDAH',
-    badge: 'Kas Sosial & Yatim',
-    logoText: 'Mandiri',
   },
 ];
 

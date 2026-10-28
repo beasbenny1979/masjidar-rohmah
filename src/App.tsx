@@ -196,7 +196,14 @@ export default function App() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     try {
       const saved = localStorage.getItem('arrohmah_bank_accounts');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 1 && parsed.some((b: any) => b.badge === 'Rekening Utama ZISWAF' || b.id === 'bank-2')) {
+          localStorage.setItem('arrohmah_bank_accounts', JSON.stringify(BANK_ACCOUNTS));
+          return BANK_ACCOUNTS;
+        }
+        return parsed;
+      }
     } catch {}
     return BANK_ACCOUNTS;
   });

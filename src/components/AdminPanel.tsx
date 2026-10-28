@@ -404,7 +404,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       bankName: 'Bank Syariah Indonesia (BSI)',
       accountNumber: '1234567890',
       accountHolder: 'DKM Masjid Ar-Rohmah',
-      badge: 'BSI ZISWAF',
+      badge: 'Rekening Utama',
       logoText: 'BSI',
     };
     onUpdateBankAccounts([...bankAccounts, newBank]);
@@ -3774,7 +3774,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={bankAccounts.length === 1 ? 'max-w-md' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'}>
                   {bankAccounts.map((bank) => (
                     <div key={bank.id} className="bg-slate-50 p-4 rounded-2xl border space-y-3 flex flex-col justify-between">
                       <div className="space-y-2">
@@ -3782,14 +3782,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <input
                             type="text"
                             value={bank.badge || ''}
-                            placeholder="Badge (cth: BSI ZISWAF)"
+                            placeholder="Badge (cth: Rekening Utama)"
                             onChange={(e) => {
                               const updated = bankAccounts.map((b) =>
                                 b.id === bank.id ? { ...b, badge: e.target.value } : b
                               );
                               onUpdateBankAccounts(updated);
                             }}
-                            className="text-[11px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-200 w-28"
+                            className="text-[11px] font-bold text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-300 w-36 shadow-2xs"
                           />
                           <button
                             onClick={() => handleDeleteBankAccount(bank.id)}
